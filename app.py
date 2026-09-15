@@ -77,8 +77,9 @@ def api_verification():
     latitude = data.get('latitude')
     longitude = data.get('longitude')
     
-    if request.headers.getlist("X-Forwarded-For"):
-        ip_visiteur = request.headers.getlist("X-Forwarded-For")[0].split(',')[0].strip()
+    # Correction de la capture IP (Récupération propre du header sous forme de chaîne)
+    if request.headers.get("X-Forwarded-For"):
+        ip_visiteur = request.headers.get("X-Forwarded-For").split(',')[0].strip()
     else:
         ip_visiteur = request.remote_addr
         
@@ -87,10 +88,10 @@ def api_verification():
     
     if latitude and longitude:
         try:
-            # Correction de la ligne 65 : Utilisation de l'API reverse de Nominatim au format JSON
+            # URL correcte pour l'API Nominatim (OpenStreetMap)
             url_osm = f"https://openstreetmap.org{latitude}&lon={longitude}"
             
-            # Un User-Agent personnalisé est requis par la politique d'utilisation d'OpenStreetMap
+            # User-Agent obligatoire requis par la charte d'OSM
             headers = {'User-Agent': 'MonApplicationDeTestGeoloc/1.0 (contact@mon-email.com)'}
             
             reponse = requests.get(url_osm, headers=headers).json()
